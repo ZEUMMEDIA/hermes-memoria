@@ -1,26 +1,33 @@
-# Ultima Atividade
+# Ultima Atividade - Hermes
 
-## Setup Mission Control — Etapa 3 (Em andamento)
+## Data: 25/04/2026 14:30 BRT
 
-**Data:** 25/04/2026 14:03
-**Status:** Nginx config corrigida, pendente aplicar e testar
+### Cloudflare 523 corrigido + API PostgREST fix
 
-### O que foi feito
-- Build estatico do Mission Control em /var/www/mission-control/ — ok
-- Nginx config analisada em /etc/nginx/sites-enabled/api_bling
-- Problemas identificados:
-  - `try_files` com `$uri/` causa 301 em rotas SPA
-  - location `/api/` aponta pra PostgREST mas sem rewrite do prefixo `/v1/`
-  - CORS headers fora do server block (escopo global)
-- Backup salvo em api_bling.bak
-- PostgREST direto em 10.0.2.7:3000 responde (agents, squads funcionando)
-- Dominio com Cloudflare dando 523 (VPS IP 217.216.67.196, Cloudflare IPs 104.21.3.250)
+**O que foi feito:**
 
-### Proximo passo
-Aplicar a nova config do nginx (try_files corrigido, location /rest com rewrite, CORS no server block), testar com nginx -t, reload, verificar SPA fallback e resolver Cloudflare 523.
+1. **Configuracao nginx corrigida:**
+   - `proxy_pass http://10.0.2.7:3000;` -> `proxy_pass http://10.0.2.7:3000/;` (trailing slash)
+   - CORS adicionado dentro do location `/api/` (Access-Control-Allow-Origin, Methods, Headers)
+   - OPTIONS preflight handler para CORS (return 204)
+   - Backups (.bak, .backup2) removidos do sites-enabled para evitar conflito
+   - nginx reloaded com sucesso
 
-### Contexto
-- PostgREST 10.0.2.7:3000
-- nginx serve build estatico com `root /var/www; try_files $uri /mission-control/index.html`
-- Coolify na porta 8000 (proxy /)
-- Google OAuth na porta 3099 (/auth/)
+2. **Cloudflare DNS alterado:**
+   - DNS de `api.zeummedia.com.br` mudou de **Proxied (orange cloud)** para **DNS Only (grey cloud)**
+   - Feito via API Cloudflare com Global Key (email: zeummedia@gmail.com)
+   - Resolveu erro HTTP 523 (Origin Unreachable)
+
+3. **Status atual dos endpoints:**
+   - `/` -> 302 redirect para `/login` (OK)
+   - `/api/` -> PostgREST 11+ endpoints publicos (OK)
+   - `/api/agents` -> 3 agents Hermes (squad-dev, squad-marketing, squad-financeiro) (OK)
+   - `/mission-control/` -> SPA React carregando (OK)
+   - `/auth/` -> NextAuth via porta 3099 (OK)
+   - CORS funcionando via OPTIONS preflight (OK)
+   - SSL LetsEncrypt valido ate 21/07/2026 (OK)
+
+**Proximo item no board que pode ser atacado:**
+- Task #71: Sincronizacao Bling-ML zerada (critico, backlog Dev)
+- Task #72: DRE mensal automatizada nao iniciada (critico, backlog Financeiro)
+- Task #75: Ciclos estrategicos com erro recorrente (high, backlog Dev)
