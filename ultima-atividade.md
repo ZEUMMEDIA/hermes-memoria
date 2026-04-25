@@ -1,56 +1,62 @@
-# Ultima Atividade — 25/04/2026 ~17:50 BRT
+# Ultima Atividade — 25/04/2026 15:45
 
-## Resumo
-Sessão 3: Limpeza massiva de ordens obsoletas. De 173 ordens, fomos para 7 ativas. Board atualizado via sync.
+## LLM Router — Cada agente com seu modelo de IA
 
-## O que foi feito
+### O que foi feito
 
-### Limpeza de ordens — 166 deletadas
+Criado o **LLM Router** (`/root/hermes-heartbeat/llm_router.py`) que centraliza
+todas as chamadas de LLM do ecossistema Hermes. Agora cada squad tem seu
+próprio modelo de IA, configurado dinamicamente na tabela `agents` do PostgREST.
 
-**Grupo A (32 ordens):** Ordens completed de ciclos strategic antigos
-- #2,3,4,6,7,8,10,11,12,15,16,17,20,21,24,25,28,29,32,33,36,37,40,41,44,45,48,49,52,53,56,57
-- Eram "Prioridade dev/marketing/financeiro/ops" que o strategic.py criava a cada 30min
+### Arquitetura
 
-**Grupo B (53 ordens):** Ordens completed do loop do order_generator antigo
-- #63-132 (excluindo ativas 66,68,80,84,96,106,125,130 e escalated 74,75,90,91,114-117)
-- Analise de vendas, recomendacao precos, DRE, CRITICO — criadas em loop ciclico
-
-**Grupo C (28 ordens):** Ordens "stuck" em cascata da delegation_bridge
-- #138-173 (todas)
-- "Ordem #X stuck: Ordem #Y stuck: ..." — cascata infinita, sem utilidade
-
-**Grupo D: Ordens escalated sem job (33 ordens)**
-- #1,5,9,13,14,18,19,22,23,26,27,30,31,34,35,38,39,42,43,46,47,50,51,54,55,74,75,90,91,114,115,116,117
-- Mesmo padrao "Prioridade dev/marketing..." — duplicatas strategic, nenhuma tinha job associado
-
-**Dedup ativas (8 ordens):** Duplicatas reais mantendo a mais antiga
-- #80,96,106,125,130 (DRE) → Mantida #66
-- #157 (OBJETIVO margem) → Mantida #154
-- #158 (SINCRONIZAR) → Mantida #155
-- #159 (RELATORIO DRE) → Mantida #156
-
-### Resultado final
 ```
-# 66 financeiro [critical] DRE mensal automatizada
-# 68 hermes    [critical] [CRITICO] 7 insights criticos detectados
-# 84 dev       [critical] CRITICO: bling_pedidos vazio - sem dados de vendas
-#154 marketing [critical] OBJETIVO: Aumentar margem de contribuicao de 12% para 20%
-#155 dev       [high]     SINCRONIZAR: Reativar sync Bling-ML (0%)
-#156 financeiro[high]     RELATORIO: Iniciar DRE automatizada mensal
-#174 marketing [medium]   Analise de vendas por marketplace
-TOTAL: 7 ordens
+[operational.py] ──┐
+[strategic.py]  ──┼──> llm_router.py ──> API (DeepSeek / OpenAI / Anthropic / OpenRouter)
+                   │        ↑
+              [agents table] (PostgREST)
 ```
 
-### Board atualizado
-- board.py sync criou apenas 1 task nova (#174), 6 ja existentes no sync
-- Board com 100 tasks (22 backlog, 36 andamento, 17 concluido)
-- Tasks manuais (insights do strategic) e tasks das 7 ordens ativas
+- `llm_router.py`: modulo central que consulta `agents` no PostgREST, mapeia
+  `model_provider` + `model_name`, e faz a chamada LLM com a API key correta
+- `operational.py` (`llm_decide`): refatorado para usar o router, com fallback
+  direto ao DeepSeek se o router falhar. Seleciona modelo baseado no squad
+  que tem mais ordens pendentes.
+- `strategic.py` (`llm_analyze`): refatorado para usar o router com
+  `squad-marketing` como padrao (analise de negocios), com fallback.
 
-### Correção no board.py
-- Adicionado filtro de título vazio no cmd_sync (evita tasks --title, --squad, --help)
+### Providers suportados
 
-## Proximos Passos
-1. Delegation_bridge ainda cria ordens "stuck" em cascata — precisa de correção para nao criar para ordens que ja tem critical ativa
-2. #155 SINCRONIZAR Bling-ML — gateway OAuth precisa ser ativado
-3. #66 DRE automatizada — primeira entrega do squad financeiro
-4. Monitorar se strategic.py volta a criar novas ordens com o schema limpo
+| Provider    | Env Var                | URL                                    |
+|-------------|------------------------|----------------------------------------|
+| deepseek    | DEEPSEEK_API_KEY       | https://api.deepseek.com/v1/chat/completions |
+| openai      | OPENAI_API_KEY         | https://api.openai.com/v1/chat/completions   |
+| anthropic   | ANTHROPIC_API_KEY      | https://api.anthropic.com/v1/messages        |
+| openrouter  | OPENROUTER_API_KEY     | https://openrouter.ai/api/v1/chat/completions |
+
+### Como trocar o modelo de um squad
+
+```bash
+curl -s -X PATCH "http://10.0.2.7:3000/agents?name=eq.squad-dev" \
+  -H "Content-Type: application/json" \
+  -d '{"model_provider": "anthropic", "model_name": "claude-sonnet-4-20250514"}'
+```
+
+1. Adiciona a API key no `.env`
+2. Faz PATCH no PostgREST no squad desejado
+3. Proximo ciclo do cron ja usa o novo modelo
+
+### Arquivos alterados
+
+- `/root/hermes-heartbeat/llm_router.py` — NOVO (11.903 bytes, 320 linhas)
+- `/root/hermes-heartbeat/operational.py` — atualizado `llm_decide` + nova `llm_decide_fallback`
+- `/root/hermes-heartbeat/strategic.py` — atualizado `llm_analyze` + nova `llm_analyze_fallback`
+- `/root/hermes-heartbeat/.env` — atualizado com placeholders para OpenAI/Anthropic/OpenRouter
+
+### Configuracao atual dos squads
+
+Todos rodando `deepseek/deepseek-chat` (unico provider com chave no momento).
+
+### Board
+
+Task #179 criada e movida para `done`.
