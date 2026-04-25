@@ -1,62 +1,41 @@
-# Ultima Atividade — 25/04/2026 15:45
+# Ultima Atividade — 25/04/2026 18:02
 
-## LLM Router — Cada agente com seu modelo de IA
+## Seletor visual de modelo de IA no Mission Control
 
 ### O que foi feito
 
-Criado o **LLM Router** (`/root/hermes-heartbeat/llm_router.py`) que centraliza
-todas as chamadas de LLM do ecossistema Hermes. Agora cada squad tem seu
-próprio modelo de IA, configurado dinamicamente na tabela `agents` do PostgREST.
+Transformei o campo de modelo de IA (antes um input de texto livre) num **seletor visual dropdown** na pagina de edicao de agentes do Mission Control.
 
-### Arquitetura
+### Como funciona
 
-```
-[operational.py] ──┐
-[strategic.py]  ──┼──> llm_router.py ──> API (DeepSeek / OpenAI / Anthropic / OpenRouter)
-                   │        ↑
-              [agents table] (PostgREST)
-```
-
-- `llm_router.py`: modulo central que consulta `agents` no PostgREST, mapeia
-  `model_provider` + `model_name`, e faz a chamada LLM com a API key correta
-- `operational.py` (`llm_decide`): refatorado para usar o router, com fallback
-  direto ao DeepSeek se o router falhar. Seleciona modelo baseado no squad
-  que tem mais ordens pendentes.
-- `strategic.py` (`llm_analyze`): refatorado para usar o router com
-  `squad-marketing` como padrao (analise de negocios), com fallback.
-
-### Providers suportados
-
-| Provider    | Env Var                | URL                                    |
-|-------------|------------------------|----------------------------------------|
-| deepseek    | DEEPSEEK_API_KEY       | https://api.deepseek.com/v1/chat/completions |
-| openai      | OPENAI_API_KEY         | https://api.openai.com/v1/chat/completions   |
-| anthropic   | ANTHROPIC_API_KEY      | https://api.anthropic.com/v1/messages        |
-| openrouter  | OPENROUTER_API_KEY     | https://openrouter.ai/api/v1/chat/completions |
-
-### Como trocar o modelo de um squad
-
-```bash
-curl -s -X PATCH "http://10.0.2.7:3000/agents?name=eq.squad-dev" \
-  -H "Content-Type: application/json" \
-  -d '{"model_provider": "anthropic", "model_name": "claude-sonnet-4-20250514"}'
-```
-
-1. Adiciona a API key no `.env`
-2. Faz PATCH no PostgREST no squad desejado
-3. Proximo ciclo do cron ja usa o novo modelo
+1. Abre `https://missioncontrol.zeumedia.com.br/agents`
+2. Clica no squad que quer alterar
+3. Clica em "Editar"
+4. No campo "Modelo", seleciona o provider no dropdown (DeepSeek, OpenAI, Anthropic, OpenRouter)
+5. Digita a versao do modelo no campo custom (ex: `deepseek-chat`, `claude-sonnet-4-20250514`, `gpt-4o`)
+6. Salva — pronto, o llm_router.py ja usa o novo modelo no proximo ciclo
 
 ### Arquivos alterados
 
-- `/root/hermes-heartbeat/llm_router.py` — NOVO (11.903 bytes, 320 linhas)
-- `/root/hermes-heartbeat/operational.py` — atualizado `llm_decide` + nova `llm_decide_fallback`
-- `/root/hermes-heartbeat/strategic.py` — atualizado `llm_analyze` + nova `llm_analyze_fallback`
-- `/root/hermes-heartbeat/.env` — atualizado com placeholders para OpenAI/Anthropic/OpenRouter
+- **AgentForm.jsx** — input de texto substituido por dropdown (`model_provider`) + input custom (`model_name`)
+- **AgentDetail.jsx** — mostra provider como badge colorido + nome do modelo separadamente
+- **Agents.jsx** — tabela mostra provider em badge roxo + nome do modelo
 
-### Configuracao atual dos squads
+### Schema do banco
 
-Todos rodando `deepseek/deepseek-chat` (unico provider com chave no momento).
+A tabela `agents` no PostgREST tem `model_provider` (varchar) e `model_name` (varchar) separados. O router (`llm_router.py`) ja consulta esses campos em runtime.
+
+### Providers disponiveis no seletor
+
+| Provider | Opcao no dropdown | Exemplo de modelo |
+|----------|------------------|-------------------|
+| deepseek | DeepSeek | deepseek-chat |
+| openai | OpenAI | gpt-4o |
+| anthropic | Anthropic | claude-sonnet-4-20250514 |
+| openrouter | OpenRouter | openai/gpt-4o |
+
+Para usar um provider novo: adiciona a API key no `/root/hermes-heartbeat/.env` e seleciona no dropdown.
 
 ### Board
 
-Task #179 criada e movida para `done`.
+Task #180 criada e movida para `done`.
